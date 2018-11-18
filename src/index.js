@@ -6,6 +6,7 @@ const { initStore } = require('snap-shot-store')
 const la = require('lazy-ass')
 const is = require('check-more-types')
 const compare = require('snap-shot-compare')
+const path = require('path')
 
 const {
   serializeDomElement,
@@ -22,11 +23,11 @@ function compareValues ({ expected, value }) {
   return compare({ expected, value, noColor, json })
 }
 
-function registerCypressSnapshot () {
+function registerCypressSnapshot (options) {
   la(is.fn(global.before), 'missing global before function')
   la(is.fn(global.after), 'missing global after function')
   la(is.object(global.Cypress), 'missing Cypress object')
-
+  options = options || {}
   console.log('registering @cypress/snapshot')
 
   let storeSnapshot
@@ -48,7 +49,7 @@ function registerCypressSnapshot () {
     return counters[key]
   }
 
-  const SNAPSHOT_FILENAME = 'snapshots.js'
+  const SNAPSHOT_FILENAME = path.join(options.snapshotPath, 'snapshots.js')
 
   function evaluateLoadedSnapShots (js) {
     la(is.string(js), 'expected JavaScript snapshot source', js)
