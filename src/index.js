@@ -59,11 +59,34 @@ function registerCypressSnapshot (options) {
     storeSnapshot = initStore(store)
   }
 
-  global.before(function loadSnapshots () {
+  function readJsSnapshot (snapshotFilename) {
     cy
-    .readFile(SNAPSHOT_FILENAME, 'utf-8', { log: false })
+    .readFile(snapshotFilename, 'utf-8', { log: false })
     .then(evaluateLoadedSnapShots)
     // no way to catch an error yet
+  }
+
+  function readJsonSnapshot (indexFilename) {
+    let store = {}
+    cy.readFile(indexFilename, 'utf-8', { log: false }).then(function (index) {
+      if (!index.snapshots) {
+        return
+      }
+      index.snapshots.forEach(function (snapFile) {
+        cy.readFile(snapFile, 'utf-8', { log: false }).then(function (snapshots) {
+          Object.assign(store, snapshots)
+        })
+      })
+    })
+    storeSnapshot = initStore(store)
+  }
+
+  global.before(function loadSnapshots () {
+    if (options.format === 'json') {
+      readJsonSnapshot(path.join(options.snapshotPath, 'index.json'))
+    } else {
+      readJsSnapshot(SNAPSHOT_FILENAME)
+    }
   })
 
   function getTestName (test) {
@@ -154,18 +177,29 @@ function registerCypressSnapshot (options) {
   Cypress.Commands.add('snapshot', { prevSubject: true }, snapshot)
 
   global.after(function saveSnapshots () {
-    if (storeSnapshot) {
-      const snapshots = storeSnapshot()
-      console.log('%d snapshot(s) on finish', countSnapshots(snapshots))
-      console.log(snapshots)
-
+    if (!storeSnapshot) {
+      return
+    }
+    const snapshots = storeSnapshot()
+    console.log('%d snapshot(s) on finish', countSnapshots(snapshots))
+    if (options.format === 'json') {
+      const snapFiles = []
+      Object.keys(snapshots).forEach((snap) => {
+        const content = Object.assign({}, { [snap]: snapshots[snap] })
+        const baseName = snap.replace(/\W/g, '').concat('.json')
+        const snapPath = path.join(options.snapshotPath, baseName)
+        cy.writeFile(snapPath, content)
+        snapFiles.push(snapPath)
+      })
+      const index = { __version: Cypress.version, snapshots: snapFiles }
+      cy.writeFile(path.join(options.snapshotPath, 'index.json'), index)
+    } else {
       snapshots.__version = Cypress.version
       const s = JSON.stringify(snapshots, null, 2)
       const str = `module.exports = ${s}\n`
       cy.writeFile(SNAPSHOT_FILENAME, str, 'utf-8', { log: false })
     }
   })
-
   return snapshot
 }
 
